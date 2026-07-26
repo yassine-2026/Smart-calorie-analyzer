@@ -31,12 +31,6 @@ function getGroqClient() {
     return groqClient;
 }
 
-const MODELS = [
-    process.env.GROQ_MODEL,
-    'llama-3.2-90b-vision-preview',
-    'llama-3.2-11b-vision-preview'
-].filter(Boolean);
-
 app.post('/api/analyze', upload.single('image'), async (req, res) => {
     try {
         const groq = getGroqClient();
@@ -46,6 +40,30 @@ app.post('/api/analyze', upload.single('image'), async (req, res) => {
 
         if (!req.file) {
             return res.status(400).json({ error: 'الرجاء التقاط أو رفع صورة صالحة.' });
+        }
+
+        // Fetch available models
+        let visionModels = [];
+        let allModels = [];
+        try {
+            const modelsResponse = await groq.models.list();
+            allModels = modelsResponse.data.map(m => m.id);
+            visionModels = allModels.filter(id => id.toLowerCase().includes('vision'));
+        } catch (modelErr) {
+            console.error('Error fetching models:', modelErr.message);
+            // Fallback just in case fetching fails, but user wants no hardcoded.
+        }
+
+        let MODELS = [...visionModels];
+        if (process.env.GROQ_MODEL) {
+            MODELS = [process.env.GROQ_MODEL, ...MODELS.filter(m => m !== process.env.GROQ_MODEL)];
+        }
+
+        if (MODELS.length === 0) {
+            return res.status(500).json({ 
+                success: false, 
+                error: `لا يوجد أي نموذج Vision متاح في حسابك. النماذج المتاحة: ${allModels.join(', ') || 'غير معروف'}` 
+            });
         }
 
         const base64Image = req.file.buffer.toString('base64');
@@ -72,6 +90,7 @@ app.post('/api/analyze', upload.single('image'), async (req, res) => {
 
         for (const model of MODELS) {
             try {
+                console.log(`محاولة استخدام النموذج: ${model}`);
                 completion = await groq.chat.completions.create({
                     messages: [
                         {
