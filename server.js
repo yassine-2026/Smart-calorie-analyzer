@@ -5,13 +5,11 @@ const path = require('path');
 require('dotenv').config();
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = 3000;
 
-// Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// Configure Multer for temporary memory storage
 const storage = multer.memoryStorage();
 const upload = multer({
     storage: storage,
@@ -20,27 +18,24 @@ const upload = multer({
         if (file.mimetype.startsWith('image/')) {
             cb(null, true);
         } else {
-            cb(new Error('الملف الذي تم رفعه ليس صورة.'));
+            cb(new Error('يرجى رفع صورة صالحة.'));
         }
     }
 });
 
-// Lazy initialization of Groq Client
 let groqClient = null;
 function getGroqClient() {
-    if (!groqClient) {
-        if (!process.env.GROQ_API_KEY) return null;
+    if (!groqClient && process.env.GROQ_API_KEY) {
         groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
     }
     return groqClient;
 }
 
-// Analysis API Endpoint
 app.post('/api/analyze', upload.single('image'), async (req, res) => {
     try {
         const groq = getGroqClient();
         if (!groq) {
-            return res.status(500).json({ error: 'مفتاح GROQ_API_KEY غير متوفر في متغيرات البيئة.' });
+            return res.status(500).json({ error: 'لم يتم إعداد مفتاح الذكاء الاصطناعي' });
         }
 
         if (!req.file) {
@@ -50,19 +45,20 @@ app.post('/api/analyze', upload.single('image'), async (req, res) => {
         const base64Image = req.file.buffer.toString('base64');
         const mimeType = req.file.mimetype;
 
-        const prompt = `قم بتحليل صورة الطعام هذه. استخرج المعلومات التالية بتنسيق JSON حصراً:
+        const prompt = `قم بتحليل صورة الطعام هذه بدقة.
+استخرج المعلومات التالية بتنسيق JSON حصراً. لا تكتب أي نص إضافي قبل أو بعد كائن JSON.
 {
-    "name": "اسم الطعام (بالعربية)",
-    "weight": "الوزن التقريبي (رقم فقط بالجرام)",
-    "calories": "عدد السعرات الحرارية (رقم فقط)",
-    "protein": "البروتين (رقم فقط بالجرام)",
-    "fat": "الدهون (رقم فقط بالجرام)",
-    "carbs": "الكربوهيدرات (رقم فقط بالجرام)",
-    "confidence": "نسبة ثقتك في التحليل (رقم فقط من 100)",
-    "tips": "نصيحة غذائية قصيرة"
+    "name": "اسم الطعام باللغة العربية",
+    "ingredients": "المكونات المحتملة (نص)",
+    "weight": 0, // الوزن التقريبي بالجرام كـ رقم صحيح
+    "calories": 0, // السعرات الحرارية كـ رقم صحيح
+    "protein": 0, // البروتين بالجرام كـ رقم صحيح
+    "fat": 0, // الدهون بالجرام كـ رقم صحيح
+    "carbs": 0, // الكربوهيدرات بالجرام كـ رقم صحيح
+    "confidence": 0, // نسبة ثقتك في التحليل (0-100) كـ رقم صحيح
+    "tips": "نصائح غذائية مفيدة (نص)"
 }
-تأكد أن المفاتيح باللغة الإنجليزية كما هي، وأن القيم المخصصة للأرقام تحتوي على أرقام فقط بدون نصوص، باستثناء name و tips.
-لا تكتب أي نص آخر خارج كائن JSON.`;
+إذا لم تكن الصورة لطعام واضح، أعد القيم بأصفار وضع رسالة في tips تطلب رفع صورة أوضح لطعام.`;
 
         const completion = await groq.chat.completions.create({
             messages: [
@@ -74,42 +70,65 @@ app.post('/api/analyze', upload.single('image'), async (req, res) => {
                     ]
                 }
             ],
-            // Using a powerful current Groq vision model
             model: 'llama-3.2-90b-vision-preview',
             temperature: 0.1,
         });
 
-        const content = completion.choices[0]?.message?.content || "";
+        let content = completion.choices[0]?.message?.content || "";
         
-        // Extract JSON from response
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        // Clean markdown JSON formatting if present
+        content = content.replace(/```json/gi, '').replace(/```/g, '').trim();
 
-        if (jsonMatch) {
-            const data = JSON.parse(jsonMatch[0]);
-            res.json(data);
-        } else {
-            throw new Error("لم يتمكن النموذج من التعرف على الطعام وتوليد استجابة JSON صحيحة.");
+        // Extract JSON substring if there's any extra text
+        const jsonStartIndex = content.indexOf('{');
+        const jsonEndIndex = content.lastIndexOf('}');
+        
+        if (jsonStartIndex !== -1 && jsonEndIndex !== -1) {
+            content = content.substring(jsonStartIndex, jsonEndIndex + 1);
         }
+
+        let data;
+        try {
+            data = JSON.parse(content);
+        } catch (parseError) {
+            console.error("Failed to parse JSON:", content);
+            throw new Error("يرجى رفع صورة أوضح");
+        }
+
+        res.json(data);
 
     } catch (error) {
-        console.error('Error during image analysis:', error);
+        console.error('API Error:', error.message);
         
-        // Handle specific API or App errors
-        if (error.status === 429 || (error.response && error.response.status === 429)) {
-            return res.status(429).json({ error: 'عذراً، تم استنفاد الحصة المسموحة من طلبات Groq API. يرجى المحاولة لاحقاً.' });
+        let errorMessage = 'حدث خطأ غير متوقع. يرجى المحاولة لاحقاً.';
+        
+        if (error.status === 429 || (error.message && error.message.toLowerCase().includes('rate limit'))) {
+            errorMessage = 'تم تجاوز الحد المسموح';
+        } else if (error.message.includes('صورة أوضح')) {
+            errorMessage = 'يرجى رفع صورة أوضح';
+        } else if (error.message.includes('صورة صالحة')) {
+            errorMessage = 'يرجى رفع صورة صالحة.';
+        } else if (error.status === 401) {
+            errorMessage = 'مفتاح API غير صالح.';
+        } else if (error.status === 400 || error.status >= 500) {
+            errorMessage = 'يرجى رفع صورة أوضح'; // Fallback for general vision errors
         }
-        
-        if (error.message.includes('ليس صورة')) {
-            return res.status(400).json({ error: error.message });
-        }
-        
-        res.status(500).json({ error: 'حدث خطأ أثناء الاتصال بالخادم أو تحليل الصورة. تأكد من أن الصورة واضحة.' });
+
+        res.status(500).json({ error: errorMessage });
     }
 });
 
-// Fallback route to serve the frontend
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Error handling middleware for multer
+app.use((err, req, res, next) => {
+    if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({ error: 'حجم الصورة كبير جداً. الحد الأقصى هو 10 ميغابايت.' });
+        }
+    }
+    if (err) {
+        return res.status(500).json({ error: 'حدث خطأ أثناء معالجة الملف.' });
+    }
+    next();
 });
 
 app.listen(port, '0.0.0.0', () => {
