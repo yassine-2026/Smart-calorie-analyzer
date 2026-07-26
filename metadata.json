@@ -1,0 +1,6 @@
+{
+  "name": "محلل السعرات الذكي",
+  "description": "تطبيق لتحليل السعرات الحرارية من صور الطعام باستخدام Groq Vision API",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

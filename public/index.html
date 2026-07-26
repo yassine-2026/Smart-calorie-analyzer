@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>محلل السعرات الحرارية الذكي</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+    <style>
+      body { margin: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+      /* Ensure hidden class works properly for script logic */
+      .hidden { display: none !important; }
+    </style>
+</head>
+<body class="bg-[#f8fafc] text-slate-900 font-sans flex flex-col overflow-hidden h-full">
+  <!-- Header Section -->
+  <header class="h-16 bg-white border-b border-slate-200 px-4 md:px-8 flex items-center justify-between shadow-sm shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-200">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold text-slate-800 tracking-tight leading-none">محلل السعرات الذكي</h1>
+        <p class="text-xs text-slate-400 mt-1 uppercase tracking-wider font-semibold italic">نظام تحليل الغذاء - Groq Vision</p>
+      </div>
+    </div>
+    <div class="flex gap-4">
+      <div class="hidden sm:flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full">
+        <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
+        <span class="text-xs font-bold text-slate-600">Llama-3 Active</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 flex flex-col lg:flex-row gap-6 p-4 md:p-6 overflow-hidden max-w-7xl mx-auto w-full">
+    <!-- Sidebar: Input Controls & Preview -->
+    <aside class="w-full lg:w-[340px] flex flex-col gap-6 shrink-0 h-full overflow-y-auto lg:overflow-visible">
+      <!-- Image Preview Area -->
+      <div id="previewContainer" class="hidden bg-white border-2 border-dashed border-slate-300 rounded-[2rem] flex-1 min-h-[250px] md:min-h-[300px] flex flex-col items-center justify-center relative overflow-hidden bg-slate-50 group hover:border-emerald-400 transition-colors">
+        <img id="imagePreview" src="" class="absolute inset-0 w-full h-full object-cover" alt="معاينة الصورة">
+      </div>
+
+      <!-- Initial empty state container before image is selected -->
+      <div id="emptyStateContainer" class="bg-white border-2 border-dashed border-slate-300 rounded-[2rem] flex-1 min-h-[250px] md:min-h-[300px] flex flex-col items-center justify-center p-4 relative overflow-hidden bg-slate-50 transition-colors">
+         <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-slate-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span class="text-sm font-bold text-slate-400">يرجى رفع صورة للبدء</span>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="grid grid-cols-2 gap-3 shrink-0">
+        <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden">
+        <input type="file" id="uploadInput" accept="image/*" class="hidden">
+        
+        <button id="btnCamera" class="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-colors">
+          <span class="text-lg mb-1">📸</span>
+          <span class="text-xs font-bold text-slate-700">التقاط صورة</span>
+        </button>
+        <button id="btnUpload" class="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-colors">
+          <span class="text-lg mb-1">📁</span>
+          <span class="text-xs font-bold text-slate-700">رفع ملف</span>
+        </button>
+        <button id="btnAnalyze" disabled class="col-span-2 py-4 bg-slate-900 text-white rounded-2xl font-bold text-lg shadow-xl shadow-slate-200 flex items-center justify-center gap-2 hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          <span>حلل الوجبة الآن</span>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M11.3 1.047a1 1 0 01.897.447l7 12c.384.658.384 1.45 0 2.108l-7 12a1 1 0 01-1.738 0l-7-12a1.25 1.25 0 010-2.108l7-12a1 1 0 01.841-.447z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Result Dashboard -->
+    <section class="flex-1 bg-white lg:rounded-[2.5rem] rounded-3xl shadow-sm border border-slate-100 flex flex-col p-4 md:p-8 overflow-y-auto lg:overflow-hidden relative">
+      
+      <!-- Loading State -->
+      <div id="loadingState" class="hidden absolute inset-0 z-20 bg-white/95 flex flex-col items-center justify-center rounded-[2.5rem] p-8">
+         <div class="w-16 h-16 border-4 border-slate-100 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
+         <p class="text-lg font-bold text-slate-700">جاري تحليل الطعام وحساب السعرات...</p>
+      </div>
+
+      <!-- Error State -->
+      <div id="errorState" class="hidden absolute inset-0 z-30 bg-white flex flex-col items-center justify-center rounded-[2.5rem] p-8">
+         <div class="text-5xl mb-4">⚠️</div>
+         <p id="errorMessage" class="text-lg font-bold text-red-500 text-center"></p>
+      </div>
+
+      <!-- Initial State Instructions (Visible before analysis) -->
+      <div id="initialState" class="flex flex-col items-center justify-center h-full text-slate-400">
+         <div class="text-6xl mb-4 opacity-50">🍽️</div>
+         <h3 class="text-xl font-bold text-slate-500">لوحة النتائج</h3>
+         <p class="text-sm">قم برفع أو التقاط صورة لبدء التحليل</p>
+      </div>
+
+      <!-- Results Container -->
+      <div id="resultsContainer" class="hidden h-full flex flex-col">
+        <div class="flex justify-between items-start mb-8 shrink-0">
+          <div>
+            <h2 id="foodName" class="text-2xl md:text-3xl font-black text-slate-800">اسم الطعام</h2>
+            <p class="text-slate-500 mt-1 flex items-center gap-2 font-medium">
+              <span class="w-2 h-2 bg-blue-500 rounded-full"></span>
+              الوزن التقريبي: <span id="valWeight">-</span>
+            </p>
+          </div>
+          <div class="text-left shrink-0">
+            <div id="valCalories" class="text-3xl md:text-4xl font-black text-emerald-500">-</div>
+            <div class="text-[10px] md:text-xs font-bold uppercase tracking-widest text-slate-400">إجمالي السعرات</div>
+          </div>
+        </div>
+
+        <!-- Macros Grid -->
+        <div class="grid grid-cols-3 gap-3 md:gap-6 mb-8 shrink-0">
+          <div class="bg-slate-50 p-4 md:p-5 rounded-2xl md:rounded-3xl border border-slate-100">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-[10px] md:text-xs font-bold text-slate-400 uppercase">بروتين</span>
+              <span id="valProtein" class="text-base md:text-lg font-black text-slate-700">-</span>
+            </div>
+            <div class="h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div class="h-full bg-emerald-500 rounded-full w-[100%]"></div>
+            </div>
+          </div>
+          <div class="bg-slate-50 p-4 md:p-5 rounded-2xl md:rounded-3xl border border-slate-100">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-[10px] md:text-xs font-bold text-slate-400 uppercase">دهون</span>
+              <span id="valFat" class="text-base md:text-lg font-black text-slate-700">-</span>
+            </div>
+            <div class="h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div class="h-full bg-orange-400 rounded-full w-[100%]"></div>
+            </div>
+          </div>
+          <div class="bg-slate-50 p-4 md:p-5 rounded-2xl md:rounded-3xl border border-slate-100">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-[10px] md:text-xs font-bold text-slate-400 uppercase">كربوهيدرات</span>
+              <span id="valCarbs" class="text-base md:text-lg font-black text-slate-700">-</span>
+            </div>
+            <div class="h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div class="h-full bg-blue-500 rounded-full w-[100%]"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
+          <!-- Health Insights -->
+          <div class="flex flex-col min-h-0">
+            <h3 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-4 shrink-0">نصائح غذائية مخصصة</h3>
+            <div class="space-y-3 overflow-y-auto pr-1 pb-4">
+              <div class="flex gap-3 p-3 bg-blue-50 rounded-2xl border border-blue-100">
+                <span class="text-xl shrink-0">💡</span>
+                <p id="valTips" class="text-sm text-blue-900 leading-snug font-medium">-</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Analysis Status -->
+          <div class="bg-slate-900 rounded-[2rem] p-6 text-white flex flex-col justify-between shrink-0 lg:h-auto">
+            <div>
+               <div class="flex justify-between items-center mb-6">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">دقة التحليل</span>
+                <span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-500/30">عالية جداً</span>
+              </div>
+              <div class="text-5xl font-black mb-2"><span id="valConfidence">-</span><span class="text-2xl text-slate-500">%</span></div>
+              <p class="text-xs text-slate-400 leading-relaxed">تم استخدام محرك Groq Vision بموديل Llama-3-90B لضمان أدق تقدير للمكونات والكميات.</p>
+            </div>
+            
+            <div class="pt-4 border-t border-slate-800 mt-6 lg:mt-0">
+               <div class="flex items-center gap-2 text-[10px] font-bold text-slate-500">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                النتائج تقديرية بناءً على الرؤية الحاسوبية
+               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer Bar -->
+  <footer class="h-10 bg-slate-50 border-t border-slate-200 px-8 flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-tighter shrink-0 hidden md:flex">
+    <div>تم التطوير بواسطة م. برمجيات خبير | GROQ_API_READY</div>
+    <div class="flex gap-6">
+      <span>النسخة 1.0.4</span>
+    </div>
+  </footer>
+  <script src="script.js"></script>
+</body>
+</html>

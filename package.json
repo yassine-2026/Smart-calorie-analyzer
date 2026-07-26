@@ -1,0 +1,20 @@
+{
+  "name": "food-calories-analyzer",
+  "version": "1.0.0",
+  "description": "تطبيق لتحليل السعرات الحرارية من صور الطعام باستخدام Groq Vision API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build": "echo 'No build step required'"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1",
+    "groq-sdk": "^0.9.0",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
