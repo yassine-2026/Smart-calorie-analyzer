@@ -5,7 +5,7 @@ const path = require('path');
 require('dotenv').config();
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
@@ -70,7 +70,7 @@ app.post('/api/analyze', upload.single('image'), async (req, res) => {
                     ]
                 }
             ],
-            model: 'llama-3.2-90b-vision-preview',
+            model: process.env.GROQ_MODEL || 'llama-3.2-11b-vision-preview',
             temperature: 0.1,
         });
 
@@ -102,16 +102,23 @@ app.post('/api/analyze', upload.single('image'), async (req, res) => {
         
         let errorMessage = 'حدث خطأ غير متوقع. يرجى المحاولة لاحقاً.';
         
-        if (error.status === 429 || (error.message && error.message.toLowerCase().includes('rate limit'))) {
-            errorMessage = 'تم تجاوز الحد المسموح';
-        } else if (error.message.includes('صورة أوضح')) {
-            errorMessage = 'يرجى رفع صورة أوضح';
-        } else if (error.message.includes('صورة صالحة')) {
+        if (error.status === 429 || (error.message && error.message.toLowerCase().includes('rate limit')) || (error.message && error.message.toLowerCase().includes('quota'))) {
+            errorMessage = 'عذراً، لقد تجاوزت الحد المسموح للاستخدام. يرجى المحاولة لاحقاً.';
+        } else if (error.message && error.message.toLowerCase().includes('model')) {
+            // Model not found or decommissioned - display generic error, log the real one
+            console.error('Model Error:', error.message);
+            errorMessage = 'حدث خطأ في النظام. يرجى المحاولة لاحقاً.';
+        } else if (error.status === 404) {
+            console.error('Not Found Error (might be model):', error.message);
+            errorMessage = 'حدث خطأ في النظام. يرجى المحاولة لاحقاً.';
+        } else if (error.message && error.message.includes('صورة أوضح')) {
+            errorMessage = 'تعذر تحليل الصورة بدقة. يرجى رفع صورة أوضح.';
+        } else if (error.message && error.message.includes('صورة صالحة')) {
             errorMessage = 'يرجى رفع صورة صالحة.';
         } else if (error.status === 401) {
-            errorMessage = 'مفتاح API غير صالح.';
+            errorMessage = 'مفتاح API غير صالح. يرجى التحقق من إعدادات المفتاح.';
         } else if (error.status === 400 || error.status >= 500) {
-            errorMessage = 'يرجى رفع صورة أوضح'; // Fallback for general vision errors
+            errorMessage = 'تعذر تحليل الصورة بدقة. يرجى رفع صورة أوضح.'; // Fallback for general vision errors
         }
 
         res.status(500).json({ error: errorMessage });
