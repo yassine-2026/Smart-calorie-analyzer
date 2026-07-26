@@ -31,11 +31,17 @@ function getGroqClient() {
     return groqClient;
 }
 
+const MODELS = [
+    process.env.GROQ_MODEL,
+    'llama-3.2-90b-vision-preview',
+    'llama-3.2-11b-vision-preview'
+].filter(Boolean);
+
 app.post('/api/analyze', upload.single('image'), async (req, res) => {
     try {
         const groq = getGroqClient();
         if (!groq) {
-            return res.status(500).json({ error: 'لم يتم إعداد مفتاح الذكاء الاصطناعي' });
+            return res.status(401).json({ error: 'لم يتم إعداد مفتاح الذكاء الاصطناعي (GROQ_API_KEY غير موجود)' });
         }
 
         if (!req.file) {
@@ -60,21 +66,54 @@ app.post('/api/analyze', upload.single('image'), async (req, res) => {
 }
 إذا لم تكن الصورة لطعام واضح، أعد القيم بأصفار وضع رسالة في tips تطلب رفع صورة أوضح لطعام.`;
 
-        const completion = await groq.chat.completions.create({
-            messages: [
-                {
-                    role: 'user',
-                    content: [
-                        { type: 'text', text: prompt },
-                        { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Image}` } }
-                    ]
+        let completion;
+        let success = false;
+        let lastError = null;
+
+        for (const model of MODELS) {
+            try {
+                completion = await groq.chat.completions.create({
+                    messages: [
+                        {
+                            role: 'user',
+                            content: [
+                                { type: 'text', text: prompt },
+                                { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Image}` } }
+                            ]
+                        }
+                    ],
+                    model: model,
+                    temperature: 0.1,
+                });
+                success = true;
+                break; // If successful, exit the loop
+            } catch (err) {
+                lastError = err;
+                const errMessage = err.message ? err.message.toLowerCase() : '';
+                
+                // If it's 401, 429, etc., don't fallback, just break and handle below
+                if (err.status === 401 || err.status === 429) {
+                    break;
                 }
-            ],
-            model: process.env.GROQ_MODEL || 'llama-3.2-11b-vision-preview',
-            temperature: 0.1,
-        });
+                
+                // Fallback only if model_decommissioned or model not found (404) or similar errors
+                if (errMessage.includes('model_decommissioned') || errMessage.includes('model_not_found') || errMessage.includes('does not exist') || err.status === 404 || err.status === 400) {
+                    console.error(`Model ${model} failed, trying next... Error: ${err.message}`);
+                    continue;
+                } else {
+                    // For other unexpected errors, break
+                    break;
+                }
+            }
+        }
+
+        if (!success) {
+            console.error('All models failed. Last error:', lastError ? lastError.message : 'Unknown');
+            return res.status(500).json({ success: false, error: 'لا يوجد نموذج Vision صالح حالياً في حساب Groq.' });
+        }
 
         let content = completion.choices[0]?.message?.content || "";
+
         
         // Clean markdown JSON formatting if present
         content = content.replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -102,10 +141,14 @@ app.post('/api/analyze', upload.single('image'), async (req, res) => {
         
         let errorMessage = 'حدث خطأ غير متوقع. يرجى المحاولة لاحقاً.';
         
-        if (error.status === 429 || (error.message && error.message.toLowerCase().includes('rate limit')) || (error.message && error.message.toLowerCase().includes('quota'))) {
+        if (error.status === 429 || (error.message && (error.message.toLowerCase().includes('rate limit') || error.message.toLowerCase().includes('quota')))) {
             errorMessage = 'عذراً، لقد تجاوزت الحد المسموح للاستخدام. يرجى المحاولة لاحقاً.';
+        } else if (error.status === 401) {
+            errorMessage = 'مفتاح API غير صالح. يرجى التحقق من إعدادات المفتاح.';
+        } else if (error.status === 400) {
+            console.error('Groq Bad Request Error (400):', error.message);
+            errorMessage = 'تعذر تحليل الصورة بدقة. يرجى رفع صورة أوضح.';
         } else if (error.message && error.message.toLowerCase().includes('model')) {
-            // Model not found or decommissioned - display generic error, log the real one
             console.error('Model Error:', error.message);
             errorMessage = 'حدث خطأ في النظام. يرجى المحاولة لاحقاً.';
         } else if (error.status === 404) {
@@ -115,13 +158,11 @@ app.post('/api/analyze', upload.single('image'), async (req, res) => {
             errorMessage = 'تعذر تحليل الصورة بدقة. يرجى رفع صورة أوضح.';
         } else if (error.message && error.message.includes('صورة صالحة')) {
             errorMessage = 'يرجى رفع صورة صالحة.';
-        } else if (error.status === 401) {
-            errorMessage = 'مفتاح API غير صالح. يرجى التحقق من إعدادات المفتاح.';
-        } else if (error.status === 400 || error.status >= 500) {
-            errorMessage = 'تعذر تحليل الصورة بدقة. يرجى رفع صورة أوضح.'; // Fallback for general vision errors
+        } else if (error.status >= 500) {
+            errorMessage = 'حدث خطأ في الخادم. يرجى المحاولة لاحقاً.';
         }
 
-        res.status(500).json({ error: errorMessage });
+        res.status(500).json({ success: false, error: errorMessage });
     }
 });
 
